@@ -29,7 +29,7 @@ df = None
 if use_sample:
     df = pd.DataFrame({
         "Day": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-        "Sales":,
+        "Sales":[120,135,128,140,980,130,125],
         "Customers": [24, 27, 25, 29, 195, 26, 25]
     })
     st.info("📊 Loaded sample retail dataset (Notice Friday's massive spike!).")
