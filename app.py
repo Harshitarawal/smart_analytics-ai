@@ -5,131 +5,171 @@ import plotly.express as px
 from google import genai
 from gtts import gTTS
 import io
-from analytics import find_anomalies
+import urllib.parse
+from analytics import (
+    audit_and_clean_data,
+    find_anomalies,
+    calculate_profit_leak,
+    full_statistical_profile,
+    analyze_day_patterns,
+    analyze_categories
+)
 
-st.set_page_config(page_title="VocalData AI", page_icon="📊", layout="wide")
+st.set_page_config(page_title="VocalData 360° Analytics", page_icon="📊", layout="wide")
 
-st.title("📊 VocalData: Your AI Data Assistant")
-st.write("Upload your business data sheet below for automatic statistical audits, AI Q&A, voice briefs, and 'What-If' simulations.")
+st.title("📊 VocalData: Automated Business Intelligence & Goal Solver")
+st.write("Complete 360° data diagnosis, Profit Leak (₹) detection, Goal-Seeker reverse math, bilingual voice updates, and 1-click WhatsApp reporting.")
 
-# Sidebar for entering your free Gemini API Key
+# Load secret API key if configured on Streamlit Cloud
+default_key = st.secrets.get("GEMINI_API_KEY", "")
+
 with st.sidebar:
-    st.header("🔑 AI Settings")
-    api_key = st.text_input("Enter your free Google Gemini API Key:", type="password")
-    st.caption("Get a free key at ://google.com")
+    st.header("⚙️ Controls & Language")
+    currency = st.selectbox("💱 Currency Symbol:", ["₹", "$", "€", "£"])
+    auto_clean = st.checkbox("🧹 Auto-Clean Dirty Data", value=True)
+    voice_lang = st.radio("🗣️ Voice & Report Language:", ["English (Simple + Executive)", "हिन्दी (Hindi)"])
     st.divider()
-    st.markdown("### 🚀 Built With:")
-    st.markdown("- **Deterministic Math:** Z-Score & IQR Outliers\n- **AI Engine:** Gemini 2.5 Flash\n- **Voice Brief:** Google TTS")
-
-# 1-Click Sample Data Option + CSV Uploader
-use_sample = st.checkbox("✨ Use built-in sample retail data (Great for quick demo!)")
-uploaded_file = st.file_uploader("Or drop your own business CSV file here", type=["csv"])
-
-df = None
-if use_sample:
-    df = pd.DataFrame({
-        "Day": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-        "Sales":[120,135,128,140,980,130,125],
-        "Customers": [24, 27, 25, 29, 195, 26, 25]
-    })
-    st.info("📊 Loaded sample retail dataset (Notice Friday's massive spike!).")
-elif uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success("File uploaded successfully!")
-
-if df is not None:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("### 1. Data Preview")
-        st.dataframe(df.head(10), use_container_width=True)
-        
-    with col2:
-        st.write("### 2. Automatic Statistical Audit")
-        numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-        outliers = pd.DataFrame()
-        
-        if len(numeric_cols) > 0:
-            selected_col = st.selectbox("Select a number column to audit:", numeric_cols)
-            outliers = find_anomalies(df, selected_col)
-            
-            if len(outliers) > 0:
-                st.warning(f"⚠️ Alert: Found {len(outliers)} unusual statistical anomalies in '{selected_col}'!")
-                st.dataframe(outliers, use_container_width=True)
-            else:
-                st.info(f"✅ Everything looks normal in '{selected_col}'.")
-                
-            st.write("### 3. Visual Trend")
-            fig = px.line(df, y=selected_col, title=f"Trend Overview: {selected_col}", markers=True)
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Interactive "What-If" Math Simulator
-    if len(numeric_cols) > 0:
-        st.divider()
-        st.write(f"### 4. Interactive 'What-If' Simulator ({selected_col})")
-        st.write("Drag the sliders below to simulate how price or volume changes impact your numbers in real time:")
-        
-        sim_col1, sim_col2 = st.columns(2)
-        with sim_col1:
-            price_change = st.slider("Simulate Price / Rate Change (%)", -50, 100, 10)
-        with sim_col2:
-            volume_change = st.slider("Simulate Demand / Volume Change (%)", -50, 100, 5)
-            
-        multiplier = (1 + price_change / 100) * (1 + volume_change / 100)
-        df_sim = df.copy()
-        df_sim[f"Projected_{selected_col}"] = (df_sim[selected_col] * multiplier).round(2)
-        
-        baseline_total = df[selected_col].sum()
-        projected_total = df_sim[f"Projected_{selected_col}"].sum()
-        net_diff = projected_total - baseline_total
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Current Total", f"{baseline_total:,.2f}")
-        m2.metric("Projected Total", f"{projected_total:,.2f}", f"{net_diff:+,.2f}")
-        m3.metric("Net Growth Impact", f"{((multiplier - 1) * 100):+.1f}%")
-        
-        fig_sim = px.line(df_sim, y=[selected_col, f"Projected_{selected_col}"], 
-                          title=f"Current vs. Projected {selected_col}", markers=True)
-        st.plotly_chart(fig_sim, use_container_width=True)
-
-    st.divider()
-    
-    # Ask Your Data & Executive Voice Brief
-    st.write("### 5. Ask Your Data & Executive Voice Brief")
-    
-    if not api_key:
-        st.info("👈 Paste your free Google Gemini API Key in the left sidebar to unlock AI Q&A and Voice Briefs!")
+    if default_key:
+        api_key = default_key
+        st.success("✅ AI Engine Connected!")
     else:
-        client = genai.Client(api_key=api_key)
-        
-        data_context = f"""
-        Columns: {list(df.columns)}
-        Total Rows: {len(df)}
-        Summary Statistics:\n{df.describe().to_string()}
-        Detected Statistical Anomalies:\n{outliers.to_string() if not outliers.empty else 'None'}
-        """
-        
-        if st.button("🎙️ Generate 30-Second Executive Voice Brief"):
-            with st.spinner("Analyzing math and recording your audio brief..."):
-                prompt = f"You are a senior business analyst. Based on this exact statistical data, write a crisp, friendly 3-sentence spoken summary highlighting key trends and any anomalies:\n{data_context}"
-                response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                brief_text = response.text
-                
-                clean_display_text = brief_text.replace("$", "\\$")
-                st.write("**Transcript:**", clean_display_text)
-                
-                tts = gTTS(text=brief_text, lang='en')
-                audio_fp = io.BytesIO()
-                tts.write_to_fp(audio_fp)
-                st.audio(audio_fp, format='audio/mp3')
-                
-                report_content = f"VOCALDATA EXECUTIVE AUDIT REPORT\n{'='*35}\n\nAI SUMMARY:\n{brief_text}\n\nSTATISTICAL ANOMALIES DETECTED:\n{outliers.to_string() if not outliers.empty else 'None'}"
-                st.download_button("📄 Download Executive Audit Report (.txt)", data=report_content, file_name="VocalData_Executive_Report.txt")
+        api_key = st.text_input("Paste Google Gemini API Key:", type="password")
+        st.caption("Get a free key at ://google.com")
 
-        user_question = st.text_input("Ask a question about your data (e.g., 'Why did Friday spike and what should I do?'):")
-        if user_question:
-            with st.spinner("Thinking..."):
-                qa_prompt = f"Answer this business question using ONLY the verified data statistics below. Be clear and actionable.\nData:\n{data_context}\nQuestion: {user_question}"
-                qa_response = client.models.generate_content(model="gemini-2.5-flash", contents=qa_prompt)
-                st.write("#### 💡 AI Insight:")
-                st.write(qa_response.text.replace("$", "\\$"))
+# 1-Click Rich Retail Dataset or Custom File Upload
+use_sample = st.checkbox("✨ Load Rich 21-Day Multi-Category Shop Dataset (1-Click Demo)")
+uploaded_file = st.file_uploader("Or upload any business CSV file (Sales, Clinic, Cafe, E-Commerce)", type=["csv"])
+
+raw_df = None
+if use_sample:
+    dates = pd.date_range(start="2026-10-01", periods=21, freq="D")
+    categories = ["Electronics", "Apparel", "Home & Kitchen"] * 7
+    ad_spend = [500, 520, 480, 600, 950, 1100, 1050, 510, 490, 530, 620, 1200, 1350, 1150, 500, 540, 470, 610, 1000, 1250, 1100]
+    revenue = [4200, 4350, 3100, 5100, 8900, 11200, 10400, 4300, 2900, 4500, 5300, 14800, 13200, 11500, 4150, 4600, 2800, 5200, 9400, 12600, 10900]
+    customers = [42, 44, 31, 51, 89, 112, 104, 43, 29, 45, 53, 148, 132, 115, 41, 46, 28, 52, 94, 126, 109]
+    raw_df = pd.DataFrame({
+        "Date": dates.strftime("%Y-%m-%d"),
+        "Category": categories,
+        "Revenue": revenue,
+        "Ad_Spend": ad_spend,
+        "Customers": customers
+    })
+elif uploaded_file is not None:
+    raw_df = pd.read_csv(uploaded_file)
+
+if raw_df is not None:
+    df, health = audit_and_clean_data(raw_df, auto_clean=auto_clean)
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    
+    if len(numeric_cols) == 0:
+        st.error("❌ No numeric columns found in this dataset.")
+    else:
+        selected_col = st.selectbox("🎯 Choose Your Primary Metric to Analyze:", numeric_cols)
+        
+        profile = full_statistical_profile(df, selected_col)
+        outliers = find_anomalies(df, selected_col)
+        leak_amount, slow_days_count = calculate_profit_leak(df, selected_col)
+        day_insights = analyze_day_patterns(df, selected_col)
+        cat_insights = analyze_categories(df, selected_col)
+
+        # =====================================================================
+        # TOP TRAFFIC-LIGHT HEALTH SIGNAL & 4 VISUAL SCORECARDS
+        # =====================================================================
+        st.divider()
+        if profile['growth_pct'] > 5:
+            st.success(f"🟢 **GROWING STRONG ({profile['growth_pct']:+.1f}%):** Recent **{selected_col}** is trending higher than earlier days!")
+        elif profile['growth_pct'] < -5:
+            st.error(f"🔴 **NEEDS ATTENTION ({profile['growth_pct']:+.1f}%):** Recent **{selected_col}** has dropped compared to earlier days.")
+        else:
+            st.info(f"🟡 **STEADY & STABLE ({profile['growth_pct']:+.1f}%):** **{selected_col}** is staying consistent.")
+
+        c1, c2, c3, c4 = st.columns(4)
+        best_day_name = day_insights["by_day"].loc[day_insights["by_day"]['Average'].idxmax(), 'Day_Name'] if day_insights else "N/A"
+        worst_day_name = day_insights["by_day"].loc[day_insights["by_day"]['Average'].idxmin(), 'Day_Name'] if day_insights else "N/A"
+        
+        with c1:
+            st.metric(f"💰 Total {selected_col}", f"{currency}{profile['total']:,.0f}", f"Daily Avg: {currency}{profile['mean']:,.0f}")
+        with c2:
+            st.metric("🏆 Superstar Day", f"{best_day_name}", f"Peak: {currency}{profile['max']:,.0f}")
+        with c3:
+            st.metric("🐢 Slowest Day", f"{worst_day_name}", f"Lowest: {currency}{profile['min']:,.0f}", delta_color="off")
+        with c4:
+            st.metric("💸 Missed Opportunity / Leak", f"{currency}{leak_amount:,.0f}", f"Across {slow_days_count} below-normal days", delta_color="inverse")
+
+        # =====================================================================
+        # 5 ORGANIZED DATA SCIENTIST & BUSINESS EXECUTION TABS
+        # =====================================================================
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📅 1. Day Patterns & Trends",
+            "🎯 2. Goal-Seeker Math Solver",
+            "🔗 3. Drivers & Categories",
+            "📊 4. Distribution & Outliers",
+            "🩺 5. Data Health & Table"
+        ])
+
+        # --- TAB 1: DAY-OF-WEEK POWER BARS & TRENDS ---
+        with tab1:
+            if day_insights is not None:
+                st.subheader("Which Days Make the Most Money? (Visual Power Gauges)")
+                by_day = day_insights["by_day"].copy()
+                by_type = day_insights["by_type"]
+                max_avg = by_day['Average'].max()
+                
+                col_bars, col_chart = st.columns([1.1, 1.2])
+                with col_bars:
+                    for _, row in by_day.iterrows():
+                        ratio = int((row['Average'] / max_avg) * 10) if max_avg > 0 else 0
+                        blocks = "🟩" * ratio + "⬜" * (10 - ratio)
+                        badge = " 🏆 BEST" if row['Average'] == max_avg else (" 🐢 SLOW" if row['Average'] == by_day['Average'].min() else "")
+                        st.write(f"**{row['Day_Name']:<10}** | {blocks} | **{currency}{row['Average']:,.0f}**{badge}")
+                        
+                    if "Weekday (Mon-Fri)" in by_type and "Weekend (Sat-Sun)" in by_type:
+                        wd, we = by_type["Weekday (Mon-Fri)"], by_type["Weekend (Sat-Sun)"]
+                        lift = ((we - wd) / wd * 100) if wd != 0 else 0
+                        st.info(f"📅 **Weekend vs. Weekday:** Weekends average **{currency}{we:,.0f}** vs. Weekdays **{currency}{wd:,.0f}** (**{lift:+.1f}%** lift on weekends).")
+                        
+                with col_chart:
+                    fig_day_bar = px.bar(
+                        by_day, x="Day_Name", y="Average", color="Average",
+                        title=f"Average {selected_col} by Day of Week",
+                        color_continuous_scale=["#EF4444", "#F59E0B", "#10B981"], text_auto=".0f"
+                    )
+                    st.plotly_chart(fig_day_bar, use_container_width=True)
+
+            st.divider()
+            st.subheader("Time-Series Trend + Smoothed Moving Average")
+            df_trend = df.copy()
+            window = min(5, max(2, len(df) // 4))
+            df_trend[f"{window}-Day Moving Avg"] = df_trend[selected_col].rolling(window=window, min_periods=1).mean()
+            x_axis = "Date" if "Date" in df_trend.columns else df_trend.index
+            fig_line = px.line(df_trend, x=x_axis, y=[selected_col, f"{window}-Day Moving Avg"], markers=True)
+            st.plotly_chart(fig_line, use_container_width=True)
+
+        # --- TAB 2: GOAL-SEEKER REVERSE MATH SOLVER (UNIQUE DIFFERENTIATOR) ---
+        with tab2:
+            st.subheader(f"🎯 Goal-Seeker: How to Hit Your Next {selected_col} Target")
+            st.write("Instead of guessing, enter the target number you want to reach. Python will calculate **3 exact mathematical paths** based on your real data:")
+            
+            default_target = int(profile['total'] * 1.25)
+            target_goal = st.number_input(f"Enter your Target Total {selected_col} ({currency}):", min_value=1, value=max(10, default_target), step=1000)
+            
+            gap_needed = target_goal - profile['total']
+            if gap_needed <= 0:
+                st.success(f"🎉 You have already surpassed {currency}{target_goal:,.0f}! Try entering a higher target goal.")
+            else:
+                pct_boost_needed = (gap_needed / profile['total']) * 100
+                extra_per_day = gap_needed / len(df)
+                
+                g1, g2, g3 = st.columns(3)
+                with g1:
+                    st.info(f"### Path A: Price / Ticket Lift\nRaise your average price or order value by **+{pct_boost_needed:.1f}%** (or add **{currency}{extra_per_day:,.0f}/day** in upsells) while keeping the exact same customers.")
+                with g2:
+                    if day_insights is not None:
+                        slow_rows_total = by_day[by_day['Average'] < profile['mean']]['Total'].sum()
+                        slow_boost = (gap_needed / slow_rows_total * 100) if slow_rows_total > 0 else pct_boost_needed
+                        st.warning(f"### Path B: Fix Slow Days\nKeep your weekends as-is, and run a mid-week offer to boost your below-average days (like **{worst_day_name}**) by **+{slow_boost:.1f}%**.")
+                    else:
+                        st.warning(f"### Path B: Recover Profit Leak\nEliminating your **{currency}{leak_amount:,.0f}** leak on slow days immediately covers **{min(100, (leak_amount/gap_needed)*100):.0f}%** of your goal!")
+                with g3:
+                    if profile['top_driver'] and profile['driver_slope'] > 0:
+                        extra_driver_units = gap_needed / (profile['driver_slope'] * len(df))
