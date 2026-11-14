@@ -34,7 +34,7 @@ with st.sidebar:
     if default_key:
         api_key = default_key
         st.success("✅ AI Engine Connected!")
-       else:
+    else:
         api_key = st.text_input("Paste Google Gemini API Key:", type="password")
         st.caption("Get a free key at ://google.com")
     app_mode = st.radio(
@@ -42,6 +42,7 @@ with st.sidebar:
         ["📊 Sales & Business Intelligence", "📦 Smart Inventory & Stockout AI"]
     )
     st.divider()
+
 
 
 
