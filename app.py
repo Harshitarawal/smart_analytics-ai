@@ -170,7 +170,7 @@ if raw_df is not None:
                         st.warning(f"### Path B: Fix Slow Days\nKeep your weekends as-is, and run a mid-week offer to boost your below-average days (like **{worst_day_name}**) by **+{slow_boost:.1f}%**.")
                     else:
                         st.warning(f"### Path B: Recover Profit Leak\nEliminating your **{currency}{leak_amount:,.0f}** leak on slow days immediately covers **{min(100, (leak_amount/gap_needed)*100):.0f}%** of your goal!")
-                               with g3:
+               with g3: 
                     if profile['top_driver'] and profile['driver_slope'] > 0:
                         extra_driver_units = gap_needed / (profile['driver_slope'] * len(df))
                         st.success(f"### Path C: Scale `{profile['top_driver']}`\nBased on your historical slope (`+{profile['driver_slope']}` per unit), increase **{profile['top_driver']}** by **+{extra_driver_units:,.1f} units/day**.")
