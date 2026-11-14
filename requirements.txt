@@ -2,5 +2,6 @@ streamlit
 pandas
 plotly
 statsmodels
+scipy
 google-genai
 gTTS
