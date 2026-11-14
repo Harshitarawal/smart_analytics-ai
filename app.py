@@ -14,6 +14,8 @@ from analytics import (
     analyze_day_patterns,
     analyze_categories
 )
+from inventory import analyze_inventory_risk
+
 
 st.set_page_config(page_title="VocalData 360° Analytics", page_icon="📊", layout="wide")
 
@@ -32,9 +34,16 @@ with st.sidebar:
     if default_key:
         api_key = default_key
         st.success("✅ AI Engine Connected!")
-    else:
+       else:
         api_key = st.text_input("Paste Google Gemini API Key:", type="password")
         st.caption("Get a free key at ://google.com")
+    app_mode = st.radio(
+        "Choose Workspace Module:",
+        ["📊 Sales & Business Intelligence", "📦 Smart Inventory & Stockout AI"]
+    )
+    st.divider()
+
+
 
 # 1-Click Rich Retail Dataset or Custom File Upload
 use_sample = st.checkbox("✨ Load Rich 21-Day Multi-Category Shop Dataset (1-Click Demo)")
@@ -274,3 +283,92 @@ if raw_df is not None:
                         contents=f"Answer using ONLY these verified metrics: {wa_summary}. Keep it practical. Question: {q}"
                     )
                     st.info(q_resp.text.replace("$", "\\$"))
+# ==============================================================================
+# MODULE 2: SMART INVENTORY & STOCKOUT PREDICTOR (STOCKPULSE)
+# ==============================================================================
+if app_mode == "📦 Smart Inventory & Stockout AI":
+    st.divider()
+    st.title("📦 StockPulse: Predictive Inventory & Reorder Engine")
+    st.write("Uses **Poisson Probability Distributions**, **Safety Stock**, and **Economic Order Quantity (EOQ)** to prevent stockouts and auto-draft supplier orders.")
+
+    use_inv_sample = st.checkbox("✨ Load Sample Shop Inventory (1-Click Demo)", value=True)
+    inv_file = st.file_uploader("Or upload your Inventory CSV (Needs: Item_Name, Current_Stock, Daily_Sales_Avg, Lead_Time_Days)", type=["csv"])
+
+    inv_raw = None
+    if use_inv_sample:
+        inv_raw = pd.DataFrame({
+            "Item_Name": ["Arabica Coffee Beans (1kg)", "Almond Milk Cartons", "Eco Paper Cups (12oz)", "Vanilla Syrup Bottles", "Matcha Powder Tin", "Croissant Boxes"],
+            "Supplier": ["RoastMasters India", "PureNut Dairy", "GreenPack Co", "FlavorCraft", "ZenTea Imports", "BakeHouse Daily"],
+            "Current_Stock":,
+            "Daily_Sales_Avg": [4.5, 6.0, 45.0, 2.2, 1.5, 8.0],
+            "Lead_Time_Days":,
+            "Order_Cost":,
+            "Holding_Cost": [20, 15, 5, 12, 30, 10]
+        })
+    elif inv_file is not None:
+        inv_raw = pd.read_csv(inv_file)
+
+    if inv_raw is not None:
+        st.divider()
+        st.subheader("🌦️ Contextual Demand Surge Simulator (Weather / Festival / Weekend)")
+        weather_boost = st.slider("Simulate Upcoming Weekend / Heatwave / Festival Demand Surge (%):", -20, 100, 20)
+
+        results = analyze_inventory_risk(inv_raw, weather_boost_pct=weather_boost)
+        critical_items = results[results['Status'].str.contains("CRITICAL")]
+        watch_items = results[results['Status'].str.contains("WATCH")]
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("📦 Total SKUs Tracked", f"{len(results)}")
+        k2.metric("🔴 Critical Stockout Risk", f"{len(critical_items)} Items", "Action Required", delta_color="inverse")
+        k3.metric("🟡 Watch Closely", f"{len(watch_items)} Items")
+        k4.metric("🛒 Total Units to Reorder", f"{critical_items['Optimal_EOQ'].sum():,.0f} Units")
+
+        if len(critical_items) > 0:
+            st.error(f"🚨 **URGENT ALERT:** {len(critical_items)} items have a high statistical probability of running out before supplier delivery arrives!")
+        else:
+            st.success("✅ **ALL CLEAR:** All inventory items are safely stocked above their statistical reorder points.")
+
+        st.divider()
+        st.subheader("🚦 Visual Stockout Risk Gauges (Poisson Probability)")
+        for _, row in results.iterrows():
+            risk = row['Stockout_Risk_%']
+            filled = int(risk / 10)
+            bar = "🟥" * filled + "🟩" * (10 - filled)
+            st.write(f"**{row['Item_Name']:<26}** | {bar} | **{risk}% Stockout Risk** ({row['Days_Left']} days left) — {row['Status']}")
+
+        fig_risk = px.bar(
+            results, x="Item_Name", y="Stockout_Risk_%", color="Stockout_Risk_%",
+            title="Statistical Probability of Stockout Before Delivery (%)",
+            color_continuous_scale=["#10B981", "#F59E0B", "#EF4444"], text_auto=".1f"
+        )
+        st.plotly_chart(fig_risk, use_container_width=True)
+
+        st.divider()
+        st.subheader("📋 Optimal Reorder & Economic Order Quantity (EOQ) Plan")
+        display_cols = [c for c in ["Status", "Item_Name", "Supplier", "Current_Stock", "Reorder_Point", "Optimal_EOQ", "Stockout_Risk_%", "Days_Left"] if c in results.columns]
+        st.dataframe(results[display_cols], use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("📲 Automated Supplier Purchase Order Dispatch")
+        if len(critical_items) > 0:
+            po_lines = [f"• {r['Item_Name']}: Order *{r['Optimal_EOQ']} units* (Only {r['Current_Stock']} left, {r['Stockout_Risk_%']}% stockout risk)" for _, r in critical_items.iterrows()]
+            po_text = "📦 *URGENT PURCHASE ORDER REQUEST*\nPlease dispatch the following restock items:\n" + "\n".join(po_lines)
+            po_url = f"https://wa.me{urllib.parse.quote(po_text)}"
+            st.link_button("📲 Send Auto-Drafted Purchase Order to Supplier on WhatsApp", po_url, use_container_width=True)
+            st.download_button("📄 Download Purchase Order (.txt)", data=po_text, file_name="StockPulse_Purchase_Order.txt")
+        else:
+            st.info("No critical reorders needed right now!")
+
+        if api_key:
+            if st.button("🔊 Play Spoken Inventory Briefing (English / Hindi)", use_container_width=True):
+                client = genai.Client(api_key=api_key)
+                lang_rule = "in warm spoken Hindi (Devanagari script)" if "Hindi" in voice_lang else "in simple, direct English"
+                tts_code = "hi" if "Hindi" in voice_lang else "en"
+                prompt = f"Summarize this inventory status {lang_rule} in 3 short sentences. Mention how many items are critical ({len(critical_items)}), name the top urgent item and its optimal EOQ reorder quantity: {results[display_cols].to_string(index=False)}"
+                resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                st.success(resp.text)
+                tts = gTTS(text=resp.text, lang=tts_code)
+                fp = io.BytesIO()
+                tts.write_to_fp(fp)
+                st.audio(fp, format="audio/mp3", autoplay=True)
+
