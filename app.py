@@ -176,32 +176,23 @@ if raw_df is not None:
 st.success(f"### Path C: Scale {profile['top_driver']}\nBased on your historical slope (+{profile['driver_slope']} per unit), increase {profile['top_driver']} by +{extra_driver_units:,.1f} units/day.")
 else:
 st.success(f"### Path C: Volume Growth\nAttract +{pct_boost_needed:.1f}% more daily customers across all days to reach {currency}{target_goal:,.0f}.")
-# --- TAB 3: DRIVERS & CATEGORY SEGMENTATION ---
-with tab3:
-st.subheader("What Actually Drives Growth? (Correlation & Categories)")
-if not profile['drivers_df'].empty:
-m1, m2 = st.columns(2)
-with m1:
-corr_matrix = df[numeric_cols].corr().round(2)
-fig_heat = px.imshow(corr_matrix, text_auto=True, color_continuous_scale="RdBu_r", title="Correlation Matrix Heatmap")
-st.plotly_chart(fig_heat, use_container_width=True)
-with m2:
-top_feat = profile['top_driver']
-st.info(f"🔗 #1 Business Driver: {top_feat} has a {profile['top_corr']} correlation with {selected_col}.")
-fig_scat = px.scatter(df, x=top_feat, y=selected_col, title=f"{top_feat} vs. {selected_col}")
-st.plotly_chart(fig_scat, use_container_width=True)
-else:
-st.info("Upload a dataset with multiple numeric columns (like Revenue + Ad_Spend) to unlock correlation driver analysis.")
-if cat_insights:
-st.divider()
-chosen_cat = st.selectbox("Select Category / Product Column:", list(cat_insights.keys()))
-seg_df = cat_insights[chosen_cat]
-p1, p2 = st.columns(2)
-with p1:
-fig_pie = px.pie(seg_df, names=chosen_cat, values="Total", hole=0.4, title=f"Share of {selected_col} by {chosen_cat}")
-st.plotly_chart(fig_pie, use_container_width=True)
-with p2:
-st.dataframe(seg_df, use_container_width=True, hide_index=True)
+
+        with tab3:
+            st.subheader("What Actually Drives Growth? (Correlation & Categories)")
+            if not profile['drivers_df'].empty:
+                m1, m2 = st.columns(2)
+                with m1:
+                    corr_matrix = df[numeric_cols].corr().round(2)
+                    fig_heat = px.imshow(corr_matrix, text_auto=True, color_continuous_scale="RdBu_r", title="Correlation Matrix Heatmap")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                with m2:
+                    top_feat = profile['top_driver']
+                    st.info(f"🔗 **#1 Business Driver:** `{top_feat}` has a **{profile['top_corr']}** correlation with `{selected_col}`.")
+                    fig_scat = px.scatter(df, x=top_feat, y=selected_col, title=f"{top_feat} vs. {selected_col}")
+                    st.plotly_chart(fig_scat, use_container_width=True)
+            else:
+                st.info("Upload a dataset with multiple numeric columns (like Revenue + Ad_Spend) to unlock correlation driver analysis.")
+
 # --- TAB 4: DISTRIBUTION & OUTLIERS ---
 with tab4:
 st.subheader(f"Statistical Distribution & Anomaly Audit: {selected_col}")
