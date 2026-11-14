@@ -297,15 +297,16 @@ if app_mode == "📦 Smart Inventory & Stockout AI":
 
     inv_raw = None
     if use_inv_sample:
-        inv_raw = pd.DataFrame({
+                inv_raw = pd.DataFrame({
             "Item_Name": ["Arabica Coffee Beans (1kg)", "Almond Milk Cartons", "Eco Paper Cups (12oz)", "Vanilla Syrup Bottles", "Matcha Powder Tin", "Croissant Boxes"],
             "Supplier": ["RoastMasters India", "PureNut Dairy", "GreenPack Co", "FlavorCraft", "ZenTea Imports", "BakeHouse Daily"],
-            "Current_Stock":,
-            "Daily_Sales_Avg": [4.5, 6.0, 45.0, 2.2, 1.5, 8.0],
-            "Lead_Time_Days":,
-            "Order_Cost":,
-            "Holding_Cost": [20, 15, 5, 12, 30, 10]
+            "Current_Stock": list((12, 18, 140, 25, 8, 22)),
+            "Daily_Sales_Avg": list((4.5, 6.0, 45.0, 2.2, 1.5, 8.0)),
+            "Lead_Time_Days": list((3, 2, 4, 5, 6, 1)),
+            "Order_Cost": list((300, 150, 200, 250, 400, 100)),
+            "Holding_Cost": list((20, 12, 8, 15, 25, 10))
         })
+
     elif inv_file is not None:
         inv_raw = pd.read_csv(inv_file)
 
