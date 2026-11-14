@@ -173,3 +173,108 @@ if raw_df is not None:
                 with g3:
                     if profile['top_driver'] and profile['driver_slope'] > 0:
                         extra_driver_units = gap_needed / (profile['driver_slope'] * len(df))
+st.success(f"### Path C: Scale {profile['top_driver']}\nBased on your historical slope (+{profile['driver_slope']} per unit), increase {profile['top_driver']} by +{extra_driver_units:,.1f} units/day.")
+else:
+st.success(f"### Path C: Volume Growth\nAttract +{pct_boost_needed:.1f}% more daily customers across all days to reach {currency}{target_goal:,.0f}.")
+# --- TAB 3: DRIVERS & CATEGORY SEGMENTATION ---
+with tab3:
+st.subheader("What Actually Drives Growth? (Correlation & Categories)")
+if not profile['drivers_df'].empty:
+m1, m2 = st.columns(2)
+with m1:
+corr_matrix = df[numeric_cols].corr().round(2)
+fig_heat = px.imshow(corr_matrix, text_auto=True, color_continuous_scale="RdBu_r", title="Correlation Matrix Heatmap")
+st.plotly_chart(fig_heat, use_container_width=True)
+with m2:
+top_feat = profile['top_driver']
+st.info(f"🔗 #1 Business Driver: {top_feat} has a {profile['top_corr']} correlation with {selected_col}.")
+fig_scat = px.scatter(df, x=top_feat, y=selected_col, title=f"{top_feat} vs. {selected_col}")
+st.plotly_chart(fig_scat, use_container_width=True)
+else:
+st.info("Upload a dataset with multiple numeric columns (like Revenue + Ad_Spend) to unlock correlation driver analysis.")
+if cat_insights:
+st.divider()
+chosen_cat = st.selectbox("Select Category / Product Column:", list(cat_insights.keys()))
+seg_df = cat_insights[chosen_cat]
+p1, p2 = st.columns(2)
+with p1:
+fig_pie = px.pie(seg_df, names=chosen_cat, values="Total", hole=0.4, title=f"Share of {selected_col} by {chosen_cat}")
+st.plotly_chart(fig_pie, use_container_width=True)
+with p2:
+st.dataframe(seg_df, use_container_width=True, hide_index=True)
+# --- TAB 4: DISTRIBUTION & OUTLIERS ---
+with tab4:
+st.subheader(f"Statistical Distribution & Anomaly Audit: {selected_col}")
+s1, s2, s3, s4 = st.columns(4)
+s1.metric("Mean (Average)", f"{currency}{profile['mean']:,.2f}")
+s2.metric("Median (Typical)", f"{currency}{profile['median']:,.2f}")
+s3.metric("Volatility (CV%)", f"{profile['cv']}%")
+s4.metric("Skewness", f"{profile['skew']}")
+d1, d2 = st.columns(2)
+with d1:
+fig_hist = px.histogram(df, x=selected_col, nbins=12, marginal="box", title="Spread & Boxplot")
+st.plotly_chart(fig_hist, use_container_width=True)
+with d2:
+if len(outliers) > 0:
+st.warning(f"🚨 Found {len(outliers)} statistical outliers:")
+st.dataframe(outliers, use_container_width=True)
+else:
+st.success("✅ No extreme statistical outliers detected.")
+# --- TAB 5: DATA HEALTH & RAW TABLE ---
+with tab5:
+st.subheader("Data Quality & Cleaning Report")
+q1, q2, q3, q4 = st.columns(4)
+q1.metric("Data Health Score", f"{health['health_score']}%")
+q2.metric("Rows (Raw → Clean)", f"{health['raw_rows']} → {health['clean_rows']}")
+q3.metric("Missing Cells Fixed", f"{health['missing_cells']}")
+q4.metric("Duplicates Removed", f"{health['duplicate_rows']}")
+st.write("#### Descriptive Summary Table")
+st.dataframe(df.describe().round(2), use_container_width=True)
+st.write("#### Full Dataset Table")
+st.dataframe(df, use_container_width=True)
+# =====================================================================
+# ACTION CENTER: BILINGUAL VOICE BRIEF + 1-CLICK WHATSAPP DISPATCH
+# =====================================================================
+st.divider()
+st.subheader("📲 Action Center: Bilingual Voice Update & 1-Click WhatsApp Report")
+wa_summary = (
+f"📊 VocalData Business Report ({selected_col})\n"
+f"• Total: {currency}{profile['total']:,.0f} (Daily Avg: {currency}{profile['mean']:,.0f})\n"
+f"• Growth Trend: {profile['growth_pct']:+.1f}%\n"
+f"• 🏆 Best Day: {best_day_name} | 🐢 Slowest Day: {worst_day_name}\n"
+f"• 💸 Missed Opportunity on Slow Days: {currency}{leak_amount:,.0f}\n"
+f"• 🔗 Top Driver: {profile['top_driver'] or 'N/A'}"
+)
+wa_url = f"wa.me{urllib.parse.quote(wa_summary)}"
+st.link_button("📲 Send Instant Summary to Owner's WhatsApp", wa_url, use_container_width=True)
+if not api_key:
+st.info("👈 Add your free Gemini API Key in Streamlit Secrets or the left sidebar to unlock spoken Hindi/English briefings!")
+else:
+client = genai.Client(api_key=api_key)
+if st.button("▶️ Play Spoken Executive Summary (English / Hindi)", use_container_width=True):
+with st.spinner("Generating spoken business briefing..."):
+lang_prompt = "in clear, warm spoken Hindi (Devanagari script)" if "Hindi" in voice_lang else "in simple, direct English like a business advisor"
+tts_code = "hi" if "Hindi" in voice_lang else "en"
+prompt = f"""
+Present this business audit {lang_prompt} in 4 short, punchy sentences:
+1. State total {selected_col} ({currency}{profile['total']:,.0f}), daily average ({currency}{profile['mean']:,.0f}), and growth ({profile['growth_pct']:+.1f}%).
+2. Highlight superstar day ({best_day_name}) vs slowest day ({worst_day_name}).
+3. Mention the {currency}{leak_amount:,.0f} profit leak on slow days and #1 driver ({profile['top_driver']}).
+4. Give one practical action tip for {worst_day_name}.
+"""
+resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+summary_txt = resp.text
+st.success(summary_txt.replace("$", "$"))
+tts = gTTS(text=summary_txt, lang=tts_code)
+fp = io.BytesIO()
+tts.write_to_fp(fp)
+st.audio(fp, format="audio/mp3", autoplay=True)
+st.download_button("📄 Download Complete Report (.txt)", data=f"{wa_summary}\n\nAI BRIEF:\n{summary_txt}", file_name="VocalData_Executive_Report.txt")
+q = st.text_input("Ask any business question (e.g., 'What promotion should I run on slow days?'):")
+if q:
+with st.spinner("Analyzing..."):
+q_resp = client.models.generate_content(
+model="gemini-2.5-flash",
+contents=f"Answer using ONLY these verified metrics: {wa_summary}. Keep it practical. Question: {q}"
+)
+st.info(q_resp.text.replace("$", "$"))
